@@ -30,6 +30,9 @@
   .btn-ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line);}
   .btn+.btn{margin-top:10px;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .grid2 .btn{margin-top:0;}
+  select.hzsel{width:100%;padding:14px;border:1.5px solid var(--line);border-radius:11px;font-size:16px;font-family:inherit;background:#fff;color:var(--text);appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M2 4l5 6 5-6' fill='none' stroke='%23211D5E' stroke-width='2'/></svg>");background-repeat:no-repeat;background-position:right 14px center;}
+  select.hzsel:focus{outline:none;border-color:var(--teal);}
   .veh{background:#fff;border:1.5px solid var(--line);border-radius:var(--radius);padding:16px 12px;text-align:center;cursor:pointer;transition:.15s;}
   .veh:active{transform:scale(.97);}
   .veh .n{font-size:26px;font-weight:bold;color:var(--navy);line-height:1;}
@@ -150,10 +153,10 @@ const $ = s => document.querySelector(s);
 const app = $("#app"), foot = $("#footbar"), cam = $("#cam");
 
 const SEITEN_BASIS = [
-  { id:"vorne",  t:"Vorne",  h:"Front komplett ins Feld einpassen", art:"seite" },
-  { id:"hinten", t:"Hinten", h:"Heck komplett ins Feld einpassen",  art:"seite" },
-  { id:"links",  t:"Links",  h:"Handy quer halten – ganze Seite",   art:"seite" },
-  { id:"rechts", t:"Rechts", h:"Handy quer halten – ganze Seite",   art:"seite" }
+  { id:"vorne",  t:"Vorne",          h:"Ganze Front ins Bild – nah genug rangehen", art:"seite" },
+  { id:"hinten", t:"Hinten",         h:"Ganzes Heck ins Bild – nah genug rangehen",  art:"seite" },
+  { id:"links",  t:"Fahrerseite",    h:"Handy quer – ganze Seite füllt das Bild",    art:"seite" },
+  { id:"rechts", t:"Beifahrerseite", h:"Handy quer – ganze Seite füllt das Bild",    art:"seite" }
 ];
 // Zusatzfoto nur bei Fahrtende: Armaturenbrett (Tacho, Tank, Warnleuchten)
 const SEITE_ARMATUR = { id:"armatur", t:"Armaturenbrett", h:"Tacho, Tankanzeige und alle Warnleuchten fotografieren", art:"armatur" };
@@ -163,7 +166,7 @@ function seiten(){
   return (state.art === "Fahrtende") ? SEITEN_BASIS.concat([SEITE_ARMATUR]) : SEITEN_BASIS.slice();
 }
 
-let state = { fahrzeug:null, art:null, mit:null, fotos:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, reviewReady:false };
+let state = { fahrzeug:null, art:null, mit:null, fotos:{}, fotoWarn:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, reviewReady:false };
 let mediaRec=null, recChunks=[];
 
 function asciiSafe(s){return (s||"").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/Ä/g,"Ae").replace(/Ö/g,"Oe").replace(/Ü/g,"Ue").replace(/ß/g,"ss");}
@@ -171,13 +174,13 @@ function toast(m){const t=document.createElement("div");t.className="toast";t.te
 function nowStr(){const d=new Date(),p=n=>String(n).padStart(2,"0");return `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;}
 function allePhotos(){return seiten().every(s=>state.fotos[s.id]);}
 
-/* Bild aus <canvas>/<video> herunterrechnen + JPEG */
+/* Bild aus <canvas>/<video>/Datei herunterrechnen + JPEG (volle Details) */
 function toJpeg(src,sw,sh){
-  const max=1280; let w=sw,h=sh;
+  const max=2200; let w=sw,h=sh;
   if(w>h&&w>max){h=Math.round(h*max/w);w=max;} else if(h>=w&&h>max){w=Math.round(w*max/h);h=max;}
   const c=document.createElement("canvas");c.width=w;c.height=h;
   c.getContext("2d").drawImage(src,0,0,w,h);
-  return c.toDataURL("image/jpeg",0.7);
+  return c.toDataURL("image/jpeg",0.82);
 }
 function compressFile(file){return new Promise(res=>{const img=new Image();img.onload=()=>res(toJpeg(img,img.width,img.height));img.src=URL.createObjectURL(file);});}
 
@@ -211,13 +214,16 @@ function viewStart(){
       </div>
     </div>
     <div class="card">
-      <label>Dein Handzeichen</label>
-      <div class="hz">${CONFIG.mitarbeiter.map(m=>`<button data-hz="${m.hz}" class="${state.mit&&state.mit.hz===m.hz?'sel':''}"><div class="code">${m.hz}</div><div class="nm">${m.name}</div></button>`).join("")}</div>
+      <label for="hzSel">Dein Handzeichen</label>
+      <select id="hzSel" class="hzsel">
+        <option value="" ${!state.mit?'selected':''} disabled>Bitte wählen …</option>
+        ${CONFIG.mitarbeiter.map(m=>`<option value="${m.hz}" ${state.mit&&state.mit.hz===m.hz?'selected':''}>${m.hz} – ${m.name}</option>`).join("")}
+      </select>
     </div>
     <button class="btn btn-ghost" id="back">← Anderes Fahrzeug</button>`;
   foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${state.art&&state.mit?'':'disabled'}>Weiter zu den Fotos</button>`;
   app.querySelectorAll("[data-art]").forEach(b=>b.onclick=()=>{state.art=b.dataset.art;render();});
-  app.querySelectorAll("[data-hz]").forEach(b=>b.onclick=()=>{state.mit=CONFIG.mitarbeiter.find(m=>m.hz===b.dataset.hz);render();});
+  $("#hzSel").onchange=e=>{state.mit=CONFIG.mitarbeiter.find(m=>m.hz===e.target.value)||null; $("#weiter").disabled=!(state.art&&state.mit);};
   $("#back").onclick=()=>{state.fahrzeug=null;render();};
   $("#weiter").onclick=()=>{if(state.art&&state.mit)render();};
 }
@@ -227,86 +233,68 @@ function carSideIcon(){return `<svg width="60" height="40" viewBox="0 0 60 40" f
 function viewFotos(){
   const LISTE = seiten();
   const done = LISTE.filter(s=>state.fotos[s.id]).length;
+  const W = state.fotoWarn||{};
   app.innerHTML = `${stepsBar(2)}
     <h2>Fotos aufnehmen</h2>
     <p class="lead">${state.fahrzeug.n} · ${state.art} · ${done}/${LISTE.length} Fotos</p>
-    <p class="hint" style="margin-bottom:14px;">Tippe ein Feld an. Die Kamera zeigt eine Umriss-Schablone – einfach hineinschieben, dann auslösen.${state.art==="Fahrtende"?" Beim Armaturenbrett Zündung an, damit Warnleuchten sichtbar sind." : ""}</p>
-    ${LISTE.map(s=>{const f=state.fotos[s.id];
-      return `<div class="photoslot ${f?'done':''}" data-side="${s.id}">
+    <p class="hint" style="margin-bottom:14px;">Tippe ein Feld an – es öffnet die Handy-Kamera in voller Auflösung. Geh so nah ran, dass die ganze Seite bzw. Front/Heck das Bild gerade ausfüllt.${state.art==="Fahrtende"?" Beim Armaturenbrett Zündung an, damit die Warnleuchten sichtbar sind." : ""}</p>
+    ${LISTE.map(s=>{const f=state.fotos[s.id]; const w=W[s.id];
+      return `<div class="photoslot ${f&&!w?'done':''}" data-side="${s.id}" ${w?'style="border-color:var(--red);background:#fdecea;"':''}>
         ${f?`<img class="thumb" src="${f}">`:`<div class="icon">${carSideIcon()}</div>`}
-        <div class="meta"><div class="t">${s.t}</div><div class="h">${s.h}</div></div>
-        <div class="act">${f?'✓ Ändern':'Foto ›'}</div></div>`;}).join("")}`;
+        <div class="meta"><div class="t">${s.t}</div><div class="h" ${w?'style="color:var(--red);font-weight:bold;"':''}>${w?('⚠ Foto '+w+' – bitte erneut aufnehmen'):s.h}</div></div>
+        <div class="act" ${w?'style="color:var(--red);"':''}>${f?(w?'⚠ Erneut':'✓ Ändern'):'Foto ›'}</div></div>`;}).join("")}`;
   foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${allePhotos()?'':'disabled'}>Weiter</button>`;
   app.querySelectorAll(".photoslot").forEach(el=>el.onclick=()=>openCam(el.dataset.side));
   $("#weiter").onclick=()=>{if(allePhotos()){state.reviewReady=true;render();}};
 }
 
-/* ---- LIVE-KAMERA mit Schablone (Fallback: Standard-Kamera) ---- */
-let stream=null;
-function silhouette(side){
-  // Armaturenbrett: liegendes Rechteck mit zwei angedeuteten Rundinstrumenten
-  if(side==='armatur'){
-    return `<svg viewBox="0 0 260 150" fill="none" stroke="#048AAE" stroke-width="3" stroke-dasharray="9 7">
-      <rect x="14" y="30" width="232" height="90" rx="16"/>
-      <circle cx="80" cy="75" r="30"/><circle cx="180" cy="75" r="30"/></svg>`;
-  }
-  // gestrichelte Auto-Silhouette als Ziel-Umriss
-  if(side==='vorne'||side==='hinten'){
-    return `<svg viewBox="0 0 200 150" fill="none" stroke="#048AAE" stroke-width="3" stroke-dasharray="9 7">
-      <path d="M20 110h160M30 110c0-24 12-46 30-46h80c18 0 30 22 30 46"/>
-      <path d="M52 66l10-26h76l10 26" /><circle cx="55" cy="112" r="12"/><circle cx="145" cy="112" r="12"/></svg>`;
-  }
-  return `<svg viewBox="0 0 260 120" fill="none" stroke="#048AAE" stroke-width="3" stroke-dasharray="9 7">
-    <path d="M12 92h236M22 92c0-20 8-34 26-34h40l22-22h44c22 0 34 16 46 34h32"/>
-    <circle cx="70" cy="94" r="15"/><circle cx="192" cy="94" r="15"/></svg>`;
-}
-async function openCam(side){
-  const s = seiten().find(x=>x.id===side);
-  const wrap=document.createElement("div"); wrap.id="camview";
-  wrap.innerHTML=`
-    <video autoplay playsinline muted></video>
-    <div class="overlay">${silhouette(side)}</div>
-    <div class="topbar"><div class="t">${s.t}</div><div class="h">${s.h}</div></div>
-    <div class="botbar">
-      <button class="sidebtn" id="cvClose">Abbrechen</button>
-      <div class="shutter" id="cvShoot"></div>
-      <button class="sidebtn" id="cvNative">Standard-<br>Kamera</button>
-    </div>`;
-  document.body.appendChild(wrap);
-  const video=wrap.querySelector("video");
-  $("#cvClose").onclick=()=>closeCam();
-  $("#cvNative").onclick=()=>{closeCam();captureNative(side);};
+/* ---- Aufnahme mit voller Handy-Kamera + Qualitätsprüfung ---- */
+function openCam(side){ captureNative(side); }
 
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
-    video.srcObject=stream;
-    $("#cvShoot").onclick=()=>{
-      if(!video.videoWidth){toast("Kamera noch nicht bereit …");return;}
-      const data=toJpeg(video,video.videoWidth,video.videoHeight);
-      showPreview(wrap,side,data);
-    };
-  }catch(err){
-    // Keine Freigabe / nicht unterstützt -> nahtlos auf Standard-Kamera
-    closeCam(); captureNative(side);
-  }
-}
-function showPreview(wrap,side,data){
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
-  wrap.querySelector("video").classList.add("hide");
-  wrap.querySelector(".overlay").classList.add("hide");
-  wrap.querySelector(".botbar").classList.add("hide");
-  const img=document.createElement("img"); img.className="frozen"; img.src=data; wrap.appendChild(img);
-  const bar=document.createElement("div"); bar.className="prevbar";
-  bar.innerHTML=`<button class="btn btn-ghost" id="pvRetry" style="color:#fff;background:#ffffff22;border-color:#fff5;">Wiederholen</button>
-                 <button class="btn btn-primary" id="pvOk">Passt ✓</button>`;
-  wrap.appendChild(bar);
-  $("#pvRetry").onclick=()=>{document.body.removeChild(wrap);openCam(side);};
-  $("#pvOk").onclick=()=>{state.fotos[side]=data;document.body.removeChild(wrap);render();};
-}
-function closeCam(){const w=$("#camview");if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}if(w)w.remove();}
 function captureNative(side){
-  cam.value="";cam.onchange=async e=>{const f=e.target.files[0];if(!f)return;state.fotos[side]=await compressFile(f);render();};
+  cam.value="";
+  cam.setAttribute("accept","image/*");
+  cam.setAttribute("capture","environment");
+  cam.onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const data=await compressFile(f);
+    const q=await pruefeQualitaet(data);
+    state.fotos[side]=data;
+    state.fotoWarn=state.fotoWarn||{};
+    if(q.warnung) state.fotoWarn[side]=q.warnung; else delete state.fotoWarn[side];
+    render();
+  };
   cam.click();
+}
+
+/* Nicht-blockierende Prüfung: unscharf oder zu dunkel? (ehrlicher Ersatz fürs "grün") */
+function pruefeQualitaet(dataUrl){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const S=300, r=Math.min(S/img.width,S/img.height,1);
+      const c=document.createElement("canvas");
+      c.width=Math.max(1,Math.round(img.width*r)); c.height=Math.max(1,Math.round(img.height*r));
+      const ctx=c.getContext("2d"); ctx.drawImage(img,0,0,c.width,c.height);
+      const d=ctx.getImageData(0,0,c.width,c.height).data;
+      const N=c.width*c.height, g=new Float64Array(N); let sum=0;
+      for(let i=0,p=0;i<d.length;i+=4,p++){ const y=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; g[p]=y; sum+=y; }
+      const mean=sum/N;
+      let ls=0,ls2=0,cnt=0;
+      for(let y=1;y<c.height-1;y++)for(let x=1;x<c.width-1;x++){
+        const i=y*c.width+x;
+        const lap=4*g[i]-g[i-1]-g[i+1]-g[i-c.width]-g[i+c.width];
+        ls+=lap; ls2+=lap*lap; cnt++;
+      }
+      const varLap = cnt? (ls2/cnt-(ls/cnt)*(ls/cnt)) : 999;
+      let warnung=null;
+      if(mean<45) warnung="wirkt sehr dunkel";
+      else if(varLap<60) warnung="wirkt unscharf";
+      res({mean,varLap,warnung});
+    };
+    img.onerror=()=>res({warnung:null});
+    img.src=dataUrl;
+  });
 }
 
 /* ---- Zusammenfassung + eine Ja/Nein-Frage ---- */
@@ -475,7 +463,7 @@ function showDone(fname){
     <p class="lead">Das PDF wurde erstellt${CONFIG.webhookUrl?' und an die Zentrale gesendet':''}.<br>${state.neuerSchaden?'Der Fuhrpark wird per E-Mail benachrichtigt.':''}</p>
     <p class="hint" style="text-align:center;">${fname}</p></div>`;
   foot.innerHTML=`<button class="btn btn-navy" id="neu">Nächstes Fahrzeug</button>`;
-  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,reviewReady:false};render();};
+  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},fotoWarn:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,reviewReady:false};render();};
 }
 
 /* Info-Overlay */
