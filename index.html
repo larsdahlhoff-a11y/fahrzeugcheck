@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fahrzeug-Check | Pflegedienst Herrlich</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --navy:#211D5E; --teal:#048AAE; --teal-soft:#e6f5fa;
+    --grey:#f4f5f7; --line:#e2e4ea; --text:#1c1c28; --muted:#6b6f7d;
+    --green:#2e9e5b; --red:#d33a2c; --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:var(--text);background:var(--grey);}
+  body{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+  header{background:var(--navy);color:#fff;padding:16px 18px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;}
+  header .logo{width:38px;height:38px;border-radius:9px;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;flex:0 0 auto;}
+  header h1{font-size:16px;margin:0;line-height:1.15;font-weight:bold;}
+  header .sub{font-size:12px;opacity:.75;margin-top:1px;}
+  main{flex:1;padding:18px 16px 90px;}
+  h2{font-size:18px;color:var(--navy);margin:0 0 4px;}
+  .lead{color:var(--muted);font-size:14px;margin:0 0 18px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
+  label{display:block;font-size:13px;font-weight:bold;color:var(--navy);margin-bottom:8px;}
+  .btn{display:block;width:100%;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:bold;font-family:inherit;cursor:pointer;text-align:center;}
+  .btn-primary{background:var(--teal);color:#fff;}
+  .btn-primary:disabled{background:#b8c2c8;}
+  .btn-navy{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line);}
+  .btn+.btn{margin-top:10px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .veh{background:#fff;border:1.5px solid var(--line);border-radius:var(--radius);padding:16px 12px;text-align:center;cursor:pointer;transition:.15s;}
+  .veh:active{transform:scale(.97);}
+  .veh .n{font-size:26px;font-weight:bold;color:var(--navy);line-height:1;}
+  .veh .k{font-size:12px;color:var(--muted);margin-top:6px;word-break:break-word;}
+  .hz{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .hz button{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:12px 4px;font-family:inherit;cursor:pointer;text-align:center;}
+  .hz button.sel{border-color:var(--teal);background:var(--teal-soft);}
+  .hz .code{font-size:18px;font-weight:bold;color:var(--navy);}
+  .hz .nm{font-size:11px;color:var(--muted);margin-top:3px;}
+  .steps{display:flex;gap:6px;margin-bottom:18px;}
+  .steps .s{flex:1;height:5px;border-radius:3px;background:var(--line);}
+  .steps .s.on{background:var(--teal);}
+  .photoslot{display:flex;align-items:center;gap:14px;background:#fff;border:1.5px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:12px;cursor:pointer;}
+  .photoslot.done{border-color:var(--green);background:#f2fbf5;}
+  .photoslot .icon{width:64px;height:48px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--navy);}
+  .photoslot .meta{flex:1;}
+  .photoslot .meta .t{font-weight:bold;color:var(--navy);font-size:15px;}
+  .photoslot .meta .h{font-size:12px;color:var(--muted);}
+  .photoslot .thumb{width:64px;height:48px;border-radius:8px;object-fit:cover;flex:0 0 auto;}
+  .photoslot .act{font-size:13px;font-weight:bold;color:var(--teal);flex:0 0 auto;}
+  .photoslot.done .act{color:var(--green);}
+  .yn{display:flex;gap:12px;}
+  .yn button{flex:1;border:2px solid var(--line);background:#fff;border-radius:14px;padding:20px 6px;font-family:inherit;font-size:16px;font-weight:bold;cursor:pointer;color:var(--text);}
+  .yn button.on-no{border-color:var(--green);background:#f2fbf5;color:var(--green);}
+  .yn button.on-yes{border-color:var(--red);background:#fdecea;color:var(--red);}
+  .cardiag{position:relative;background:var(--grey);border-radius:12px;padding:10px;margin:12px 0;}
+  .cardiag svg{width:100%;display:block;}
+  .marker{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;background:var(--red);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;border:2px solid #fff;}
+  .dmgrow{display:flex;gap:8px;align-items:center;margin-top:8px;}
+  .dmgrow .num{width:24px;height:24px;background:var(--red);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex:0 0 auto;}
+  .dmgrow input{flex:1;padding:9px;font-size:14px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;}
+  .dmgrow .del{color:var(--muted);font-size:20px;padding:0 6px;cursor:pointer;background:none;border:none;}
+  .sumline{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .sumline:last-child{border-bottom:none;}
+  .sumline .k{color:var(--muted);} .sumline .v{font-weight:bold;color:var(--navy);text-align:right;}
+  .sumthumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px;}
+  .sumthumbs img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;}
+  .footbar{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:0 auto;background:#fff;border-top:1px solid var(--line);padding:12px 16px;}
+  .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;z-index:80;max-width:90%;text-align:center;}
+  .hide{display:none;}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4;}
+  .istep{width:28px;height:28px;flex:0 0 auto;border-radius:50%;background:var(--navy);color:#fff;font-weight:bold;font-size:14px;display:flex;align-items:center;justify-content:center;}
+  .ihint{font-size:13px;color:var(--muted);line-height:1.45;}
+
+  /* ---- Live-Kamera Vollbild ---- */
+  #camview{position:fixed;inset:0;z-index:60;background:#000;display:flex;flex-direction:column;}
+  #camview video,#camview .frozen{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;}
+  #camview .overlay{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+  #camview .overlay svg{width:82%;max-width:460px;opacity:.9;}
+  #camview .topbar{position:absolute;top:0;left:0;right:0;padding:16px;background:linear-gradient(#000a,#0000);color:#fff;text-align:center;z-index:2;}
+  #camview .topbar .t{font-size:17px;font-weight:bold;}
+  #camview .topbar .h{font-size:13px;opacity:.85;margin-top:2px;}
+  #camview .botbar{position:absolute;bottom:0;left:0;right:0;padding:22px 20px 30px;z-index:2;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(#0000,#000b);}
+  #camview .shutter{width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #ffffff80;cursor:pointer;flex:0 0 auto;margin:0 auto;}
+  #camview .sidebtn{color:#fff;font-size:14px;font-weight:bold;background:none;border:none;cursor:pointer;width:70px;text-align:center;opacity:.9;}
+  #camview .prevbar{position:absolute;bottom:0;left:0;right:0;padding:22px 20px 30px;z-index:3;display:flex;gap:12px;background:linear-gradient(#0000,#000b);}
+  #camview .prevbar .btn{margin:0;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">H</div>
+  <div style="flex:1;"><h1>Fahrzeug-Check</h1><div class="sub">Pflegedienst Herrlich</div></div>
+  <button id="helpBtn" aria-label="Anleitung" style="width:34px;height:34px;border-radius:50%;border:1.5px solid #ffffff55;background:transparent;color:#fff;font-size:17px;font-weight:bold;cursor:pointer;flex:0 0 auto;">?</button>
+</header>
+
+<div id="infoOverlay" class="hide" style="position:fixed;inset:0;z-index:70;background:rgba(20,18,50,.55);display:flex;align-items:flex-end;">
+  <div style="background:#fff;max-width:560px;margin:0 auto;width:100%;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:20px 18px 30px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <h2 style="margin:0;">So funktioniert's</h2>
+      <button id="infoClose" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button>
+    </div>
+    <p class="lead" style="margin-bottom:16px;">Der Check dauert unter einer Minute. In dieser Reihenfolge:</p>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="display:flex;gap:12px;"><div class="istep">1</div><div><b>Fahrzeug wählen</b><br><span class="ihint">QR-Code am Auto scannen oder in der Liste antippen.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">2</div><div><b>Handzeichen & Zeitpunkt</b><br><span class="ihint">Dein Kürzel antippen (Name kommt automatisch) und „Fahrtbeginn" oder „Fahrtende" wählen.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">3</div><div><b>Fotos aufnehmen</b><br><span class="ihint">Vorne, hinten, links, rechts. Die blaue Schablone zeigt Abstand und Winkel – Auto einfach hineinschieben und auslösen. Bei „Passt" bestätigen.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">+</div><div><b>Nur bei Fahrtende: Armaturenbrett</b><br><span class="ihint">Zündung an, dann Tacho, Tankanzeige und alle Warnleuchten fotografieren.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">4</div><div><b>Neue Schäden?</b><br><span class="ihint">„Sind während deiner Fahrt neue Schäden entstanden?" Bei <b>Ja</b> kurz reinsprechen: was und wo. Bei <b>Nein</b> weiter.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">5</div><div><b>Speichern & absenden</b><br><span class="ihint">Fertig. Bei Schaden oder Warnleuchte wird das Büro automatisch informiert.</span></div></div>
+    </div>
+    <div style="margin-top:18px;padding:14px;background:var(--teal-soft);border-radius:12px;font-size:13px;color:var(--navy);">
+      <b>Wichtig:</b> Auch wenn nichts kaputt ist – bitte trotzdem fotografieren. Nur so ist belegt, in welchem Zustand du das Auto übernommen und abgegeben hast. Das schützt dich.
+    </div>
+  </div>
+</div>
+<main id="app"></main>
+<div class="footbar" id="footbar"></div>
+
+<!-- Fallback: Standard-Handykamera -->
+<input type="file" id="cam" accept="image/*" capture="environment" class="hide">
+
+<script>
+/* ============================================================
+   KONFIGURATION  –  hier anpassen
+   ============================================================ */
+const CONFIG = {
+  // Fahrzeuge:  n = Nummer (auch QR-Code ?kfz=1),  k = Kennzeichen/Name
+  fahrzeuge: [
+    { n:"1", k:"NR-PH 30" },  { n:"2", k:"NR-SL 800" },
+    { n:"3", k:"NR-SL 801" }, { n:"4", k:"NR-SL 802" }, { n:"5", k:"NR-SL 803" }
+  ],
+  // Handzeichen -> Name.
+  mitarbeiter: [
+    { hz:"RM",   name:"Romina" },  { hz:"LM", name:"Lilia" },   { hz:"DR", name:"Diana" },
+    { hz:"AnSc", name:"Anke" },    { hz:"PS", name:"Pia" },     { hz:"ALS", name:"Alessia" },
+    { hz:"SW",   name:"Swantje" }, { hz:"KB", name:"Katrin" },  { hz:"LG", name:"Lukasz" },
+    { hz:"PH",   name:"Patrick" }, { hz:"YH", name:"Yasmine" }, { hz:"TH", name:"Tanja" },
+    { hz:"EH",   name:"Esther" },  { hz:"SJ", name:"Susanne" }, { hz:"FM", name:"Frank" },
+    { hz:"LD",   name:"Lars" }
+  ],
+  webhookUrl: "",                       // optional: Google-Apps-Script-URL für zentrale Ablage
+  meldeEmail: "info@pflegedienst-herrlich.de"
+};
+
+/* ============================================================ */
+const $ = s => document.querySelector(s);
+const app = $("#app"), foot = $("#footbar"), cam = $("#cam");
+
+const SEITEN_BASIS = [
+  { id:"vorne",  t:"Vorne",  h:"Front komplett ins Feld einpassen", art:"seite" },
+  { id:"hinten", t:"Hinten", h:"Heck komplett ins Feld einpassen",  art:"seite" },
+  { id:"links",  t:"Links",  h:"Handy quer halten – ganze Seite",   art:"seite" },
+  { id:"rechts", t:"Rechts", h:"Handy quer halten – ganze Seite",   art:"seite" }
+];
+// Zusatzfoto nur bei Fahrtende: Armaturenbrett (Tacho, Tank, Warnleuchten)
+const SEITE_ARMATUR = { id:"armatur", t:"Armaturenbrett", h:"Tacho, Tankanzeige und alle Warnleuchten fotografieren", art:"armatur" };
+
+// Liefert die für den aktuellen Zeitpunkt nötigen Fotos.
+function seiten(){
+  return (state.art === "Fahrtende") ? SEITEN_BASIS.concat([SEITE_ARMATUR]) : SEITEN_BASIS.slice();
+}
+
+let state = { fahrzeug:null, art:null, mit:null, fotos:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, reviewReady:false };
+let mediaRec=null, recChunks=[];
+
+function asciiSafe(s){return (s||"").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/Ä/g,"Ae").replace(/Ö/g,"Oe").replace(/Ü/g,"Ue").replace(/ß/g,"ss");}
+function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2400);}
+function nowStr(){const d=new Date(),p=n=>String(n).padStart(2,"0");return `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+function allePhotos(){return seiten().every(s=>state.fotos[s.id]);}
+
+/* Bild aus <canvas>/<video> herunterrechnen + JPEG */
+function toJpeg(src,sw,sh){
+  const max=1280; let w=sw,h=sh;
+  if(w>h&&w>max){h=Math.round(h*max/w);w=max;} else if(h>=w&&h>max){w=Math.round(w*max/h);h=max;}
+  const c=document.createElement("canvas");c.width=w;c.height=h;
+  c.getContext("2d").drawImage(src,0,0,w,h);
+  return c.toDataURL("image/jpeg",0.7);
+}
+function compressFile(file){return new Promise(res=>{const img=new Image();img.onload=()=>res(toJpeg(img,img.width,img.height));img.src=URL.createObjectURL(file);});}
+
+/* ============================================================ VIEWS ============================================================ */
+function render(){
+  if(!state.fahrzeug) return viewFahrzeug();
+  if(!state.art || !state.mit) return viewStart();
+  if(!state.reviewReady) return viewFotos();
+  return viewZusammenfassung();
+}
+const stepsBar = a => `<div class="steps">${[0,1,2,3].map(i=>`<div class="s ${i<=a?'on':''}"></div>`).join("")}</div>`;
+
+function viewFahrzeug(){
+  app.innerHTML = `${stepsBar(0)}
+    <h2>Welches Fahrzeug?</h2>
+    <p class="lead">QR-Code am Fahrzeug scannen oder unten antippen.</p>
+    <div class="grid2">${CONFIG.fahrzeuge.map(f=>`<div class="veh" data-n="${f.n}"><div class="n">${f.n}</div><div class="k">${f.k}</div></div>`).join("")}</div>`;
+  foot.innerHTML="";
+  app.querySelectorAll(".veh").forEach(el=>el.onclick=()=>{state.fahrzeug=CONFIG.fahrzeuge.find(f=>f.n===el.dataset.n);render();});
+}
+
+function viewStart(){
+  app.innerHTML = `${stepsBar(1)}
+    <h2>${state.fahrzeug.n} · ${state.fahrzeug.k}</h2>
+    <p class="lead">Handzeichen und Zeitpunkt wählen.</p>
+    <div class="card">
+      <label>Zeitpunkt</label>
+      <div class="grid2">
+        <button class="btn ${state.art==='Fahrtbeginn'?'btn-navy':'btn-ghost'}" data-art="Fahrtbeginn">Fahrtbeginn</button>
+        <button class="btn ${state.art==='Fahrtende'?'btn-navy':'btn-ghost'}" data-art="Fahrtende">Fahrtende</button>
+      </div>
+    </div>
+    <div class="card">
+      <label>Dein Handzeichen</label>
+      <div class="hz">${CONFIG.mitarbeiter.map(m=>`<button data-hz="${m.hz}" class="${state.mit&&state.mit.hz===m.hz?'sel':''}"><div class="code">${m.hz}</div><div class="nm">${m.name}</div></button>`).join("")}</div>
+    </div>
+    <button class="btn btn-ghost" id="back">← Anderes Fahrzeug</button>`;
+  foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${state.art&&state.mit?'':'disabled'}>Weiter zu den Fotos</button>`;
+  app.querySelectorAll("[data-art]").forEach(b=>b.onclick=()=>{state.art=b.dataset.art;render();});
+  app.querySelectorAll("[data-hz]").forEach(b=>b.onclick=()=>{state.mit=CONFIG.mitarbeiter.find(m=>m.hz===b.dataset.hz);render();});
+  $("#back").onclick=()=>{state.fahrzeug=null;render();};
+  $("#weiter").onclick=()=>{if(state.art&&state.mit)render();};
+}
+
+function carSideIcon(){return `<svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 28h48M10 28c0-6 4-12 12-12h14c6 0 10 4 14 10M14 16l3-6h20l4 6"/><circle cx="18" cy="30" r="4" fill="#fff"/><circle cx="42" cy="30" r="4" fill="#fff"/></svg>`;}
+
+function viewFotos(){
+  const LISTE = seiten();
+  const done = LISTE.filter(s=>state.fotos[s.id]).length;
+  app.innerHTML = `${stepsBar(2)}
+    <h2>Fotos aufnehmen</h2>
+    <p class="lead">${state.fahrzeug.n} · ${state.art} · ${done}/${LISTE.length} Fotos</p>
+    <p class="hint" style="margin-bottom:14px;">Tippe ein Feld an. Die Kamera zeigt eine Umriss-Schablone – einfach hineinschieben, dann auslösen.${state.art==="Fahrtende"?" Beim Armaturenbrett Zündung an, damit Warnleuchten sichtbar sind." : ""}</p>
+    ${LISTE.map(s=>{const f=state.fotos[s.id];
+      return `<div class="photoslot ${f?'done':''}" data-side="${s.id}">
+        ${f?`<img class="thumb" src="${f}">`:`<div class="icon">${carSideIcon()}</div>`}
+        <div class="meta"><div class="t">${s.t}</div><div class="h">${s.h}</div></div>
+        <div class="act">${f?'✓ Ändern':'Foto ›'}</div></div>`;}).join("")}`;
+  foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${allePhotos()?'':'disabled'}>Weiter</button>`;
+  app.querySelectorAll(".photoslot").forEach(el=>el.onclick=()=>openCam(el.dataset.side));
+  $("#weiter").onclick=()=>{if(allePhotos()){state.reviewReady=true;render();}};
+}
+
+/* ---- LIVE-KAMERA mit Schablone (Fallback: Standard-Kamera) ---- */
+let stream=null;
+function silhouette(side){
+  // Armaturenbrett: liegendes Rechteck mit zwei angedeuteten Rundinstrumenten
+  if(side==='armatur'){
+    return `<svg viewBox="0 0 260 150" fill="none" stroke="#048AAE" stroke-width="3" stroke-dasharray="9 7">
+      <rect x="14" y="30" width="232" height="90" rx="16"/>
+      <circle cx="80" cy="75" r="30"/><circle cx="180" cy="75" r="30"/></svg>`;
+  }
+  // gestrichelte Auto-Silhouette als Ziel-Umriss
+  if(side==='vorne'||side==='hinten'){
+    return `<svg viewBox="0 0 200 150" fill="none" stroke="#048AAE" stroke-width="3" stroke-dasharray="9 7">
+      <path d="M20 110h160M30 110c0-24 12-46 30-46h80c18 0 30 22 30 46"/>
+      <path d="M52 66l10-26h76l10 26" /><circle cx="55" cy="112" r="12"/><circle cx="145" cy="112" r="12"/></svg>`;
+  }
+  return `<svg viewBox="0 0 260 120" fill="none" stroke="#048AAE" stroke-width="3" stroke-dasharray="9 7">
+    <path d="M12 92h236M22 92c0-20 8-34 26-34h40l22-22h44c22 0 34 16 46 34h32"/>
+    <circle cx="70" cy="94" r="15"/><circle cx="192" cy="94" r="15"/></svg>`;
+}
+async function openCam(side){
+  const s = seiten().find(x=>x.id===side);
+  const wrap=document.createElement("div"); wrap.id="camview";
+  wrap.innerHTML=`
+    <video autoplay playsinline muted></video>
+    <div class="overlay">${silhouette(side)}</div>
+    <div class="topbar"><div class="t">${s.t}</div><div class="h">${s.h}</div></div>
+    <div class="botbar">
+      <button class="sidebtn" id="cvClose">Abbrechen</button>
+      <div class="shutter" id="cvShoot"></div>
+      <button class="sidebtn" id="cvNative">Standard-<br>Kamera</button>
+    </div>`;
+  document.body.appendChild(wrap);
+  const video=wrap.querySelector("video");
+  $("#cvClose").onclick=()=>closeCam();
+  $("#cvNative").onclick=()=>{closeCam();captureNative(side);};
+
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+    video.srcObject=stream;
+    $("#cvShoot").onclick=()=>{
+      if(!video.videoWidth){toast("Kamera noch nicht bereit …");return;}
+      const data=toJpeg(video,video.videoWidth,video.videoHeight);
+      showPreview(wrap,side,data);
+    };
+  }catch(err){
+    // Keine Freigabe / nicht unterstützt -> nahtlos auf Standard-Kamera
+    closeCam(); captureNative(side);
+  }
+}
+function showPreview(wrap,side,data){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  wrap.querySelector("video").classList.add("hide");
+  wrap.querySelector(".overlay").classList.add("hide");
+  wrap.querySelector(".botbar").classList.add("hide");
+  const img=document.createElement("img"); img.className="frozen"; img.src=data; wrap.appendChild(img);
+  const bar=document.createElement("div"); bar.className="prevbar";
+  bar.innerHTML=`<button class="btn btn-ghost" id="pvRetry" style="color:#fff;background:#ffffff22;border-color:#fff5;">Wiederholen</button>
+                 <button class="btn btn-primary" id="pvOk">Passt ✓</button>`;
+  wrap.appendChild(bar);
+  $("#pvRetry").onclick=()=>{document.body.removeChild(wrap);openCam(side);};
+  $("#pvOk").onclick=()=>{state.fotos[side]=data;document.body.removeChild(wrap);render();};
+}
+function closeCam(){const w=$("#camview");if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}if(w)w.remove();}
+function captureNative(side){
+  cam.value="";cam.onchange=async e=>{const f=e.target.files[0];if(!f)return;state.fotos[side]=await compressFile(f);render();};
+  cam.click();
+}
+
+/* ---- Zusammenfassung + eine Ja/Nein-Frage ---- */
+function viewZusammenfassung(){
+  const istEnde = state.art==="Fahrtende";
+  app.innerHTML = `${stepsBar(3)}
+    <h2>Prüfen & absenden</h2>
+    <p class="lead">Fast fertig.</p>
+    <div class="card">
+      <label>Sind während deiner Fahrt neue Schäden entstanden?</label>
+      <div class="yn">
+        <button class="${state.neuerSchaden===false?'on-no':''}" data-ns="no">Nein</button>
+        <button class="${state.neuerSchaden===true?'on-yes':''}" data-ns="yes">Ja</button>
+      </div>
+      ${state.neuerSchaden===true?spracheBlock():''}
+    </div>
+    ${istEnde?`<div class="card">
+      <label>Leuchten am Armaturenbrett Warnleuchten (z. B. Motor, Kühlwasser, Beleuchtung, Service)?</label>
+      <div class="yn">
+        <button class="${state.warnleuchten===false?'on-no':''}" data-wl="no">Nein</button>
+        <button class="${state.warnleuchten===true?'on-yes':''}" data-wl="yes">Ja</button>
+      </div>
+      ${state.warnleuchten===true?`<p class="hint" style="margin-top:12px;color:var(--red);font-weight:bold;">⚠ Achtung: Das Büro wird über einen möglichen Werkstatttermin informiert. Das Armaturen-Foto ist als Beleg dabei.</p>`:''}
+    </div>`:''}
+    <div class="card">
+      <div class="sumline"><span class="k">Fahrzeug</span><span class="v">${state.fahrzeug.n} · ${state.fahrzeug.k}</span></div>
+      <div class="sumline"><span class="k">Zeitpunkt</span><span class="v">${state.art}</span></div>
+      <div class="sumline"><span class="k">Datum/Uhrzeit</span><span class="v">${nowStr()}</span></div>
+      <div class="sumline"><span class="k">Handzeichen</span><span class="v">${state.mit.hz} · ${state.mit.name}</span></div>
+      <div class="sumthumbs">${seiten().map(s=>`<img src="${state.fotos[s.id]}">`).join("")}</div>
+    </div>
+    <button class="btn btn-ghost" id="back">← Zurück zu den Fotos</button>`;
+  foot.innerHTML = `<button class="btn btn-primary" id="fertig" ${absendenBereit()?'':'disabled'}>Speichern & absenden</button>`;
+  app.querySelectorAll("[data-ns]").forEach(b=>b.onclick=()=>{
+    state.neuerSchaden = b.dataset.ns==="yes";
+    if(!state.neuerSchaden){ state.sprachnotiz=null; stopRec(); }
+    render();
+  });
+  app.querySelectorAll("[data-wl]").forEach(b=>b.onclick=()=>{ state.warnleuchten = b.dataset.wl==="yes"; render(); });
+  $("#back").onclick=()=>{state.reviewReady=false; stopRec(); render();};
+  $("#fertig").onclick=()=>absenden();
+  bindSprache();
+}
+function absendenBereit(){
+  if(state.neuerSchaden===null) return false;
+  if(state.art==="Fahrtende" && state.warnleuchten===null) return false;
+  return true;
+}
+function spracheBlock(){
+  const hatNotiz = !!state.sprachnotiz;
+  return `<p class="hint" style="margin-top:14px;">Sprich kurz rein: <b>Was</b> ist passiert und <b>wo</b> am Fahrzeug ist der Schaden? Alternativ unten tippen.</p>
+    <div id="recArea" style="margin-top:10px;">
+      <button class="btn ${mediaRec?'btn-navy':'btn-primary'}" id="recBtn">
+        ${mediaRec ? '● Aufnahme läuft – zum Stoppen tippen' : (hatNotiz ? '⟳ Neu aufnehmen' : '🎤 Sprachaufnahme starten')}
+      </button>
+      ${hatNotiz?`<audio controls src="${state.sprachnotiz.url}" style="width:100%;margin-top:10px;"></audio>`:''}
+    </div>
+    <p class="hint" style="margin-top:12px;">Oder als Text:</p>
+    <input type="text" id="dmgText" placeholder="z. B. Kratzer hinten rechts beim Einparken" value="${state.schadenText||''}" style="width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:15px;">`;
+}
+function bindSprache(){
+  const btn=$("#recBtn");
+  if(btn) btn.onclick=()=> mediaRec ? stopRec() : startRec();
+  const txt=$("#dmgText");
+  if(txt) txt.oninput=()=>{ state.schadenText = txt.value; };
+}
+async function startRec(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({audio:true});
+    recChunks=[]; mediaRec=new MediaRecorder(s);
+    mediaRec.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop=()=>{
+      s.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(recChunks,{type:mediaRec.mimeType||'audio/webm'});
+      state.sprachnotiz={ blob, url:URL.createObjectURL(blob) };
+      mediaRec=null; render();
+    };
+    mediaRec.start(); render();
+  }catch(err){
+    toast("Mikrofon nicht verfügbar – bitte Text eingeben.");
+    mediaRec=null; render();
+  }
+}
+function stopRec(){ if(mediaRec && mediaRec.state!=='inactive'){ mediaRec.stop(); } }
+
+/* ---- Absenden ---- */
+function blobToDataUrl(blob){return new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(blob);});}
+
+async function absenden(){
+  toast("Wird gespeichert …");
+  const blob=await buildPdf();
+  const fname=`Fahrzeugcheck_${state.fahrzeug.n}_${state.art}_${new Date().toISOString().slice(0,10)}.pdf`;
+  const sprachB64 = state.sprachnotiz ? await blobToDataUrl(state.sprachnotiz.blob) : "";
+
+  if(CONFIG.webhookUrl){
+    try{
+      const b=new URLSearchParams();
+      b.append("fahrzeug",state.fahrzeug.n+" "+state.fahrzeug.k);
+      b.append("art",state.art);b.append("zeit",nowStr());
+      b.append("handzeichen",state.mit.hz);b.append("name",state.mit.name);
+      b.append("neuerSchaden",state.neuerSchaden?"ja":"nein");
+      b.append("schadenText",state.schadenText||"");
+      b.append("warnleuchten", state.art==="Fahrtende" ? (state.warnleuchten?"ja":"nein") : "");
+      if(sprachB64) b.append("sprachnotiz",sprachB64);
+      seiten().forEach(s=>b.append("foto_"+s.id,state.fotos[s.id]||""));
+      fetch(CONFIG.webhookUrl,{method:"POST",mode:"no-cors",body:b});
+    }catch(e){console.warn(e);}
+  }
+  const file=new File([blob],fname,{type:"application/pdf"});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:"Fahrzeug-Check"});}catch(e){dl(blob,fname);}
+  } else dl(blob,fname);
+
+  // E-Mail-Benachrichtigung bei neuem Schaden und/oder Warnleuchten
+  const gruende=[];
+  if(state.neuerSchaden) gruende.push("NEUER SCHADEN");
+  if(state.art==="Fahrtende" && state.warnleuchten) gruende.push("WARNLEUCHTE / WERKSTATT");
+  if(gruende.length){
+    const subj=asciiSafe(`${gruende.join(" + ")} – Fahrzeug ${state.fahrzeug.n}`);
+    const body=asciiSafe([
+      `Fahrzeug: ${state.fahrzeug.n} ${state.fahrzeug.k}`,
+      `Zeitpunkt: ${state.art} / ${nowStr()}`,
+      `Handzeichen: ${state.mit.hz} (${state.mit.name})`,
+      state.neuerSchaden?`Schaden (Text): ${state.schadenText||'- siehe Sprachnotiz -'}`:``,
+      (state.art==="Fahrtende"&&state.warnleuchten)?`Warnleuchten: JA -> Werkstatttermin pruefen`:``,
+      ``,`Fotos${state.sprachnotiz?' und Sprachnotiz':''} im beigefuegten PDF/der App. PDF bitte anhaengen.`
+    ].filter(Boolean).join("\n"));
+    setTimeout(()=>{window.location.href=`mailto:${CONFIG.meldeEmail}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;},400);
+  }
+  showDone(fname);
+}
+function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();}
+
+async function buildPdf(){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+  const W=210,M=15; let y=0; const NAVY=[33,29,94],TEAL=[4,138,174];
+  doc.setFillColor(...NAVY);doc.rect(0,0,W,26,"F");doc.setFillColor(...TEAL);doc.rect(0,26,W,2,"F");
+  doc.setTextColor(255);doc.setFont("helvetica","bold");doc.setFontSize(16);doc.text("Fahrzeug-Check",M,13);
+  doc.setFontSize(10);doc.setFont("helvetica","normal");doc.text(`${state.fahrzeug.n} · ${state.fahrzeug.k}`,M,20);
+  y=38;
+  const rows=[["Fahrzeug",`${state.fahrzeug.n}  ·  ${state.fahrzeug.k}`],["Zeitpunkt",state.art],["Datum / Uhrzeit",nowStr()],["Handzeichen",`${state.mit.hz}  (${state.mit.name})`],["Neuer Schaden",state.neuerSchaden?"JA":"Nein"]];
+  if(state.art==="Fahrtende") rows.push(["Warnleuchten",state.warnleuchten?"JA – Werkstatt prüfen":"Nein"]);
+  rows.forEach(r=>{doc.setFont("helvetica","bold");doc.setTextColor(107,111,125);doc.text(r[0],M,y);doc.setFont("helvetica","normal");doc.setTextColor(33,29,94);doc.text(String(r[1]),M+45,y);y+=7;});
+  if(state.neuerSchaden){
+    y+=2;doc.setFont("helvetica","bold");doc.setTextColor(211,58,44);doc.text("Schadensbeschreibung:",M,y);y+=6;
+    doc.setFont("helvetica","normal");doc.setTextColor(33,29,94);doc.setFontSize(10);
+    const txt = state.schadenText ? state.schadenText : (state.sprachnotiz ? "(als Sprachnotiz aufgenommen)" : "(keine Beschreibung)");
+    doc.splitTextToSize(txt, W-2*M-6).forEach(line=>{doc.text(line,M+3,y);y+=6;});
+  }
+  y+=4;doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(33,29,94);doc.text("Fotodokumentation",M,y);y+=6;
+  const cw=(W-2*M-6)/2,ch=cw*0.72;let col=0,rowY=y;
+  seiten().forEach(s=>{
+    if(rowY+ch+13>280){doc.addPage();rowY=20;col=0;}
+    const x=M+col*(cw+6);doc.setDrawColor(226,228,234);doc.roundedRect(x,rowY,cw,ch+7,2,2);
+    try{doc.addImage(state.fotos[s.id],"JPEG",x+2,rowY+2,cw-4,ch-2);}catch(e){}
+    doc.setFontSize(9);doc.setTextColor(107,111,125);doc.text(s.t,x+3,rowY+ch+5);
+    col++;if(col===2){col=0;rowY+=ch+13;}});
+  doc.setFontSize(8);doc.setTextColor(150);doc.text("Pflegedienst Herrlich | Fahrzeug-Check | Seite 1",M,288);
+  return doc.output("blob");
+}
+
+function showDone(fname){
+  app.innerHTML=`<div style="text-align:center;padding:40px 10px;">
+    <div style="width:74px;height:74px;border-radius:50%;background:#e7f6ec;color:var(--green);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 18px;">✓</div>
+    <h2>Gespeichert</h2>
+    <p class="lead">Das PDF wurde erstellt${CONFIG.webhookUrl?' und an die Zentrale gesendet':''}.<br>${state.neuerSchaden?'Der Fuhrpark wird per E-Mail benachrichtigt.':''}</p>
+    <p class="hint" style="text-align:center;">${fname}</p></div>`;
+  foot.innerHTML=`<button class="btn btn-navy" id="neu">Nächstes Fahrzeug</button>`;
+  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,reviewReady:false};render();};
+}
+
+/* Info-Overlay */
+document.getElementById("helpBtn").onclick=()=>document.getElementById("infoOverlay").classList.remove("hide");
+document.getElementById("infoClose").onclick=()=>document.getElementById("infoOverlay").classList.add("hide");
+document.getElementById("infoOverlay").onclick=e=>{ if(e.target.id==="infoOverlay") e.currentTarget.classList.add("hide"); };
+
+/* QR-Deeplink ?kfz=3 */
+(function init(){
+  const p=new URLSearchParams(location.search);const kfz=p.get("kfz")||p.get("fahrzeug");
+  if(kfz){const f=CONFIG.fahrzeuge.find(x=>x.n===kfz);if(f)state.fahrzeug=f;}
+  render();
+})();
+</script>
+</body>
+</html>
