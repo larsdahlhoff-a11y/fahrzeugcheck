@@ -47,6 +47,8 @@
   .steps .s.on{background:var(--teal);}
   .photoslot{display:flex;align-items:center;gap:14px;background:#fff;border:1.5px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:12px;cursor:pointer;}
   .photoslot.done{border-color:var(--green);background:#f2fbf5;}
+  .photoslot.warnred{border-color:var(--red);background:#fdecea;}
+  .photoslot.warnamber{border-color:#e8a13a;background:#fff8ec;}
   .photoslot .icon{width:64px;height:48px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--navy);}
   .photoslot .meta{flex:1;}
   .photoslot .meta .t{font-weight:bold;color:var(--navy);font-size:15px;}
@@ -109,7 +111,7 @@
     <div style="display:flex;flex-direction:column;gap:14px;">
       <div style="display:flex;gap:12px;"><div class="istep">1</div><div><b>Fahrzeug wählen</b><br><span class="ihint">QR-Code am Auto scannen oder in der Liste antippen.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">2</div><div><b>Handzeichen & Zeitpunkt</b><br><span class="ihint">Dein Kürzel antippen (Name kommt automatisch) und „Fahrtbeginn" oder „Fahrtende" wählen.</span></div></div>
-      <div style="display:flex;gap:12px;"><div class="istep">3</div><div><b>Fotos aufnehmen</b><br><span class="ihint">Vorne, hinten, links, rechts. Die blaue Schablone zeigt Abstand und Winkel – Auto einfach hineinschieben und auslösen. Bei „Passt" bestätigen.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">3</div><div><b>Fotos aufnehmen</b><br><span class="ihint">Vorne, hinten, Fahrerseite, Beifahrerseite. Nah genug rangehen, bis das Auto das Bild füllt. Nach jedem Foto zeigt ein grüner Haken „Fahrzeug erkannt" – bei Gelb bitte noch einmal auslösen.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">+</div><div><b>Nur bei Fahrtende: Armaturenbrett</b><br><span class="ihint">Zündung an, dann Tacho, Tankanzeige und alle Warnleuchten fotografieren.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">4</div><div><b>Neue Schäden?</b><br><span class="ihint">„Sind während deiner Fahrt neue Schäden entstanden?" Bei <b>Ja</b> kurz reinsprechen: was und wo. Bei <b>Nein</b> weiter.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">5</div><div><b>Speichern & absenden</b><br><span class="ihint">Fertig. Bei Schaden oder Warnleuchte wird das Büro automatisch informiert.</span></div></div>
@@ -166,7 +168,7 @@ function seiten(){
   return (state.art === "Fahrtende") ? SEITEN_BASIS.concat([SEITE_ARMATUR]) : SEITEN_BASIS.slice();
 }
 
-let state = { fahrzeug:null, art:null, mit:null, fotos:{}, fotoWarn:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, reviewReady:false };
+let state = { fahrzeug:null, art:null, mit:null, fotos:{}, fotoStatus:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, reviewReady:false };
 let mediaRec=null, recChunks=[];
 
 function asciiSafe(s){return (s||"").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/Ä/g,"Ae").replace(/Ö/g,"Oe").replace(/Ü/g,"Ue").replace(/ß/g,"ss");}
@@ -183,6 +185,54 @@ function toJpeg(src,sw,sh){
   return c.toDataURL("image/jpeg",0.82);
 }
 function compressFile(file){return new Promise(res=>{const img=new Image();img.onload=()=>res(toJpeg(img,img.width,img.height));img.src=URL.createObjectURL(file);});}
+
+/* ---- Fahrzeugerkennung (COCO-SSD, lädt erst beim ersten Foto, läuft komplett auf dem Gerät) ---- */
+let _detPromise=null;
+function injectScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.async=true;s.onload=res;s.onerror=()=>rej(new Error(src));document.head.appendChild(s);});}
+function getDetector(){
+  if(_detPromise) return _detPromise;
+  _detPromise=(async()=>{
+    try{
+      await injectScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js");
+      await injectScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js");
+      return await window.cocoSsd.load({base:"lite_mobilenet_v2"});
+    }catch(e){ console.warn("Fahrzeugerkennung nicht verfügbar:",e); _detPromise=null; return null; }
+  })();
+  return _detPromise;
+}
+function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
+const FAHRZEUG_KLASSEN=new Set(["car","truck","bus"]);
+/* liefert: {status:'ok'|'small'|'none'|'skip'} – 'skip' = Modell nicht geladen, dann keine Aussage */
+async function erkenneFahrzeug(dataUrl){
+  let model=null;
+  try{ model=await getDetector(); }catch(e){ model=null; }
+  if(!model) return {status:"skip"};
+  try{
+    const img=await loadImg(dataUrl);
+    const MAX=512, r=Math.min(MAX/img.width,MAX/img.height,1);
+    const cw=Math.max(1,Math.round(img.width*r)), ch=Math.max(1,Math.round(img.height*r));
+    const c=document.createElement("canvas");c.width=cw;c.height=ch;
+    c.getContext("2d").drawImage(img,0,0,cw,ch);
+    const preds=await model.detect(c,10);
+    const veh=preds.filter(p=>FAHRZEUG_KLASSEN.has(p.class)&&p.score>=0.45);
+    if(!veh.length) return {status:"none"};
+    const frac=Math.max(...veh.map(p=>(p.bbox[2]*p.bbox[3])/(cw*ch)));
+    return {status: frac<0.20 ? "small" : "ok"};
+  }catch(e){ console.warn(e); return {status:"skip"}; }
+}
+/* Anzeige-Zustand pro Foto-Feld */
+function slotMeta(st, defHint){
+  if(!st) return {cls:"", hint:defHint, hintStyle:"", act:"Foto ›", actStyle:""};
+  switch(st.kind){
+    case "ok":     return {cls:"done", hint:"✓ Fahrzeug erkannt", hintStyle:"color:var(--green);font-weight:bold;", act:"✓ Ändern", actStyle:"color:var(--green);"};
+    case "saved":  return {cls:"done", hint:"✓ Foto gespeichert", hintStyle:"color:var(--green);font-weight:bold;", act:"✓ Ändern", actStyle:"color:var(--green);"};
+    case "pruefe": return {cls:"", hint:"⏳ wird geprüft …", hintStyle:"color:var(--teal);font-weight:bold;", act:"…", actStyle:"color:var(--teal);"};
+    case "quality":return {cls:"warnred", hint:"⚠ Foto "+st.text+" – bitte erneut aufnehmen", hintStyle:"color:var(--red);font-weight:bold;", act:"⚠ Erneut", actStyle:"color:var(--red);"};
+    case "none":   return {cls:"warnamber", hint:"⚠ Kein Fahrzeug erkannt – bitte prüfen", hintStyle:"color:#c67a12;font-weight:bold;", act:"⚠ Prüfen", actStyle:"color:#c67a12;"};
+    case "small":  return {cls:"warnamber", hint:"⚠ Fahrzeug zu klein – näher rangehen", hintStyle:"color:#c67a12;font-weight:bold;", act:"⚠ Näher", actStyle:"color:#c67a12;"};
+  }
+  return {cls:"", hint:defHint, hintStyle:"", act:"Foto ›", actStyle:""};
+}
 
 /* ============================================================ VIEWS ============================================================ */
 function render(){
@@ -233,16 +283,15 @@ function carSideIcon(){return `<svg width="60" height="40" viewBox="0 0 60 40" f
 function viewFotos(){
   const LISTE = seiten();
   const done = LISTE.filter(s=>state.fotos[s.id]).length;
-  const W = state.fotoWarn||{};
   app.innerHTML = `${stepsBar(2)}
     <h2>Fotos aufnehmen</h2>
     <p class="lead">${state.fahrzeug.n} · ${state.art} · ${done}/${LISTE.length} Fotos</p>
-    <p class="hint" style="margin-bottom:14px;">Tippe ein Feld an – es öffnet die Handy-Kamera in voller Auflösung. Geh so nah ran, dass die ganze Seite bzw. Front/Heck das Bild gerade ausfüllt.${state.art==="Fahrtende"?" Beim Armaturenbrett Zündung an, damit die Warnleuchten sichtbar sind." : ""}</p>
-    ${LISTE.map(s=>{const f=state.fotos[s.id]; const w=W[s.id];
-      return `<div class="photoslot ${f&&!w?'done':''}" data-side="${s.id}" ${w?'style="border-color:var(--red);background:#fdecea;"':''}>
+    <p class="hint" style="margin-bottom:14px;">Tippe ein Feld an – es öffnet die Handy-Kamera in voller Auflösung. Geh so nah ran, dass die ganze Seite bzw. Front/Heck das Bild gerade ausfüllt. Nach jedem Foto prüft die App automatisch, ob das Fahrzeug erkannt wurde (grüner Haken).${state.art==="Fahrtende"?" Beim Armaturenbrett Zündung an, damit die Warnleuchten sichtbar sind." : ""}</p>
+    ${LISTE.map(s=>{const f=state.fotos[s.id]; const m=slotMeta(state.fotoStatus[s.id], s.h);
+      return `<div class="photoslot ${f?m.cls:''}" data-side="${s.id}">
         ${f?`<img class="thumb" src="${f}">`:`<div class="icon">${carSideIcon()}</div>`}
-        <div class="meta"><div class="t">${s.t}</div><div class="h" ${w?'style="color:var(--red);font-weight:bold;"':''}>${w?('⚠ Foto '+w+' – bitte erneut aufnehmen'):s.h}</div></div>
-        <div class="act" ${w?'style="color:var(--red);"':''}>${f?(w?'⚠ Erneut':'✓ Ändern'):'Foto ›'}</div></div>`;}).join("")}`;
+        <div class="meta"><div class="t">${s.t}</div><div class="h" style="${f?m.hintStyle:''}">${f?m.hint:s.h}</div></div>
+        <div class="act" style="${f?m.actStyle:''}">${f?m.act:'Foto ›'}</div></div>`;}).join("")}`;
   foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${allePhotos()?'':'disabled'}>Weiter</button>`;
   app.querySelectorAll(".photoslot").forEach(el=>el.onclick=()=>openCam(el.dataset.side));
   $("#weiter").onclick=()=>{if(allePhotos()){state.reviewReady=true;render();}};
@@ -258,10 +307,23 @@ function captureNative(side){
   cam.onchange=async e=>{
     const f=e.target.files[0]; if(!f) return;
     const data=await compressFile(f);
-    const q=await pruefeQualitaet(data);
     state.fotos[side]=data;
-    state.fotoWarn=state.fotoWarn||{};
-    if(q.warnung) state.fotoWarn[side]=q.warnung; else delete state.fotoWarn[side];
+    const q=await pruefeQualitaet(data);
+    const slot=seiten().find(x=>x.id===side);
+    const istSeite = slot && slot.art==="seite";
+    // 1) Schärfe/Helligkeit hat Vorrang – dann lohnt Erneutaufnehmen ohnehin
+    if(q.warnung){ state.fotoStatus[side]={kind:"quality",text:q.warnung}; render(); return; }
+    // 2) Armaturenbrett: keine Fahrzeugerkennung sinnvoll
+    if(!istSeite){ state.fotoStatus[side]={kind:"saved"}; render(); return; }
+    // 3) Außenfoto: Foto sofort anzeigen, Fahrzeug im Hintergrund erkennen
+    state.fotoStatus[side]={kind:"pruefe"}; render();
+    const res=await erkenneFahrzeug(data);
+    if(state.fotos[side]!==data) return; // Foto wurde zwischenzeitlich ersetzt
+    state.fotoStatus[side] =
+        res.status==="ok"    ? {kind:"ok"} :
+        res.status==="small" ? {kind:"small"} :
+        res.status==="none"  ? {kind:"none"} :
+                               {kind:"saved"}; // 'skip' → neutral gespeichert
     render();
   };
   cam.click();
@@ -463,7 +525,7 @@ function showDone(fname){
     <p class="lead">Das PDF wurde erstellt${CONFIG.webhookUrl?' und an die Zentrale gesendet':''}.<br>${state.neuerSchaden?'Der Fuhrpark wird per E-Mail benachrichtigt.':''}</p>
     <p class="hint" style="text-align:center;">${fname}</p></div>`;
   foot.innerHTML=`<button class="btn btn-navy" id="neu">Nächstes Fahrzeug</button>`;
-  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},fotoWarn:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,reviewReady:false};render();};
+  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},fotoStatus:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,reviewReady:false};render();};
 }
 
 /* Info-Overlay */
