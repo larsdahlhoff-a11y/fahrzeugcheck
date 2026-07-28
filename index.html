@@ -111,10 +111,10 @@
     <div style="display:flex;flex-direction:column;gap:14px;">
       <div style="display:flex;gap:12px;"><div class="istep">1</div><div><b>Fahrzeug wählen</b><br><span class="ihint">QR-Code am Auto scannen oder in der Liste antippen.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">2</div><div><b>Handzeichen & Zeitpunkt</b><br><span class="ihint">Dein Kürzel antippen (Name kommt automatisch) und „Fahrtbeginn" oder „Fahrtende" wählen.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">+</div><div><b>Nur bei Fahrtende: Neue Schäden?</b><br><span class="ihint">Vor den Fotos: „Sind während deiner Fahrt neue Schäden entstanden?" Bei <b>Ja</b> kurz reinsprechen (was und wo) und die Stelle beim Fotografieren gut sichtbar mitaufnehmen.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">3</div><div><b>Fotos aufnehmen</b><br><span class="ihint">Vorne, hinten, Fahrerseite, Beifahrerseite. Nah genug rangehen, bis das Auto das Bild füllt. Nach jedem Foto zeigt ein grüner Haken „Fahrzeug erkannt" – bei Gelb bitte noch einmal auslösen.</span></div></div>
       <div style="display:flex;gap:12px;"><div class="istep">+</div><div><b>Nur bei Fahrtende: Armaturenbrett</b><br><span class="ihint">Zündung an, dann Tacho, Tankanzeige und alle Warnleuchten fotografieren.</span></div></div>
-      <div style="display:flex;gap:12px;"><div class="istep">4</div><div><b>Neue Schäden?</b><br><span class="ihint">„Sind während deiner Fahrt neue Schäden entstanden?" Bei <b>Ja</b> kurz reinsprechen: was und wo. Bei <b>Nein</b> weiter.</span></div></div>
-      <div style="display:flex;gap:12px;"><div class="istep">5</div><div><b>Speichern & absenden</b><br><span class="ihint">Fertig. Bei Schaden oder Warnleuchte wird das Büro automatisch informiert.</span></div></div>
+      <div style="display:flex;gap:12px;"><div class="istep">4</div><div><b>Speichern & absenden</b><br><span class="ihint">Fertig. Bei Schaden oder Warnleuchte wird das Büro automatisch informiert.</span></div></div>
     </div>
     <div style="margin-top:18px;padding:14px;background:var(--teal-soft);border-radius:12px;font-size:13px;color:var(--navy);">
       <b>Wichtig:</b> Auch wenn nichts kaputt ist – bitte trotzdem fotografieren. Nur so ist belegt, in welchem Zustand du das Auto übernommen und abgegeben hast. Das schützt dich.
@@ -147,7 +147,8 @@ const CONFIG = {
     { hz:"LD",   name:"Lars" }
   ],
   webhookUrl: "https://script.google.com/macros/s/AKfycbx4WdSYn3V9mqs6c52xLxwCE12KAPktqQKOwC7uDb2PjTQTAGy3IQYFUevJVC4QoRjc/exec",  // Google-Apps-Script (zentrale Ablage)
-  meldeEmail: "info@pflegedienst-herrlich.de"
+  meldeEmail: "info@pflegedienst-herrlich.de",
+  erkennung: true   // Fahrzeugerkennung (grüner Haken) an/aus. Bei Problemen auf älteren Handys auf false setzen.
 };
 
 /* ============================================================ */
@@ -168,7 +169,7 @@ function seiten(){
   return (state.art === "Fahrtende") ? SEITEN_BASIS.concat([SEITE_ARMATUR]) : SEITEN_BASIS.slice();
 }
 
-let state = { fahrzeug:null, art:null, mit:null, fotos:{}, fotoStatus:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, reviewReady:false };
+let state = { fahrzeug:null, art:null, mit:null, fotos:{}, fotoStatus:{}, neuerSchaden:null, schadenText:"", sprachnotiz:null, warnleuchten:null, schadenAbgefragt:false, reviewReady:false };
 let mediaRec=null, recChunks=[];
 
 function asciiSafe(s){return (s||"").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/Ä/g,"Ae").replace(/Ö/g,"Oe").replace(/Ü/g,"Ue").replace(/ß/g,"ss");}
@@ -187,8 +188,10 @@ function toJpeg(src,sw,sh){
 function compressFile(file){return new Promise(res=>{const img=new Image();img.onload=()=>res(toJpeg(img,img.width,img.height));img.src=URL.createObjectURL(file);});}
 
 /* ---- Fahrzeugerkennung (COCO-SSD, lädt erst beim ersten Foto, läuft komplett auf dem Gerät) ---- */
-let _detPromise=null;
+let _detPromise=null, _detBroken=false;
 function injectScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.async=true;s.onload=res;s.onerror=()=>rej(new Error(src));document.head.appendChild(s);});}
+/* Notausgang: nie länger als ms warten – sonst hängt die Prüfung endlos */
+function withTimeout(promise,ms){return Promise.race([promise, new Promise(res=>setTimeout(()=>res("__timeout"),ms))]);}
 function getDetector(){
   if(_detPromise) return _detPromise;
   _detPromise=(async()=>{
@@ -202,23 +205,26 @@ function getDetector(){
 }
 function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
 const FAHRZEUG_KLASSEN=new Set(["car","truck","bus"]);
-/* liefert: {status:'ok'|'small'|'none'|'skip'} – 'skip' = Modell nicht geladen, dann keine Aussage */
+/* liefert: {status:'ok'|'small'|'none'|'skip'} – 'skip' = keine Aussage, Foto gilt als gespeichert */
 async function erkenneFahrzeug(dataUrl){
-  let model=null;
-  try{ model=await getDetector(); }catch(e){ model=null; }
-  if(!model) return {status:"skip"};
+  if(CONFIG.erkennung===false || _detBroken) return {status:"skip"};
+  // 1) Modell laden – mit Timeout (erstes Foto darf nicht ewig hängen)
+  const model=await withTimeout(getDetector(),15000);
+  if(!model || model==="__timeout" || typeof model.detect!=="function"){ _detBroken=true; return {status:"skip"}; }
   try{
     const img=await loadImg(dataUrl);
-    const MAX=512, r=Math.min(MAX/img.width,MAX/img.height,1);
+    const MAX=320, r=Math.min(MAX/img.width,MAX/img.height,1);
     const cw=Math.max(1,Math.round(img.width*r)), ch=Math.max(1,Math.round(img.height*r));
     const c=document.createElement("canvas");c.width=cw;c.height=ch;
     c.getContext("2d").drawImage(img,0,0,cw,ch);
-    const preds=await model.detect(c,10);
+    // 2) Erkennung – ebenfalls mit Timeout; schlägt sie fehl, wird sie für die Sitzung deaktiviert
+    const preds=await withTimeout(model.detect(c,5),7000);
+    if(!Array.isArray(preds)){ _detBroken=true; return {status:"skip"}; }
     const veh=preds.filter(p=>FAHRZEUG_KLASSEN.has(p.class)&&p.score>=0.45);
     if(!veh.length) return {status:"none"};
     const frac=Math.max(...veh.map(p=>(p.bbox[2]*p.bbox[3])/(cw*ch)));
     return {status: frac<0.20 ? "small" : "ok"};
-  }catch(e){ console.warn(e); return {status:"skip"}; }
+  }catch(e){ console.warn(e); _detBroken=true; return {status:"skip"}; }
 }
 /* Anzeige-Zustand pro Foto-Feld */
 function slotMeta(st, defHint){
@@ -238,10 +244,38 @@ function slotMeta(st, defHint){
 function render(){
   if(!state.fahrzeug) return viewFahrzeug();
   if(!state.art || !state.mit) return viewStart();
+  if(state.art==="Fahrtbeginn") state.neuerSchaden=false;            // bei Übernahme keine Schadensfrage
+  if(state.art==="Fahrtende" && !state.schadenAbgefragt) return viewSchadenfrage();  // Frage VOR den Fotos
   if(!state.reviewReady) return viewFotos();
   return viewZusammenfassung();
 }
 const stepsBar = a => `<div class="steps">${[0,1,2,3].map(i=>`<div class="s ${i<=a?'on':''}"></div>`).join("")}</div>`;
+
+/* Schadensfrage – nur bei Fahrtende, direkt vor der Fotodokumentation */
+function viewSchadenfrage(){
+  app.innerHTML = `${stepsBar(1)}
+    <h2>Neue Schäden?</h2>
+    <p class="lead">${state.fahrzeug.n} · ${state.fahrzeug.k} · Fahrtende</p>
+    <div class="card">
+      <label>Sind während deiner Fahrt neue Schäden entstanden?</label>
+      <div class="yn">
+        <button class="${state.neuerSchaden===false?'on-no':''}" data-ns="no">Nein</button>
+        <button class="${state.neuerSchaden===true?'on-yes':''}" data-ns="yes">Ja</button>
+      </div>
+      ${state.neuerSchaden===true?spracheBlock():''}
+    </div>
+    <p class="hint">Danach fotografierst du das Fahrzeug wie gewohnt. Bei „Ja" bitte die betroffene Stelle gut sichtbar mitaufnehmen.</p>
+    <button class="btn btn-ghost" id="back">← Zurück</button>`;
+  foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${state.neuerSchaden!==null?'':'disabled'}>Weiter zu den Fotos</button>`;
+  app.querySelectorAll("[data-ns]").forEach(b=>b.onclick=()=>{
+    state.neuerSchaden = b.dataset.ns==="yes";
+    if(!state.neuerSchaden){ state.sprachnotiz=null; stopRec(); }
+    render();
+  });
+  $("#back").onclick=()=>{ state.art=null; stopRec(); render(); };
+  $("#weiter").onclick=()=>{ if(state.neuerSchaden!==null){ state.schadenAbgefragt=true; render(); } };
+  bindSprache();
+}
 
 function viewFahrzeug(){
   app.innerHTML = `${stepsBar(0)}
@@ -359,20 +393,13 @@ function pruefeQualitaet(dataUrl){
   });
 }
 
-/* ---- Zusammenfassung + eine Ja/Nein-Frage ---- */
+/* ---- Zusammenfassung ---- */
 function viewZusammenfassung(){
   const istEnde = state.art==="Fahrtende";
+  const schadenText = state.schadenText ? state.schadenText : (state.sprachnotiz ? "Sprachnotiz" : "—");
   app.innerHTML = `${stepsBar(3)}
     <h2>Prüfen & absenden</h2>
     <p class="lead">Fast fertig.</p>
-    <div class="card">
-      <label>Sind während deiner Fahrt neue Schäden entstanden?</label>
-      <div class="yn">
-        <button class="${state.neuerSchaden===false?'on-no':''}" data-ns="no">Nein</button>
-        <button class="${state.neuerSchaden===true?'on-yes':''}" data-ns="yes">Ja</button>
-      </div>
-      ${state.neuerSchaden===true?spracheBlock():''}
-    </div>
     ${istEnde?`<div class="card">
       <label>Leuchten am Armaturenbrett Warnleuchten (z. B. Motor, Kühlwasser, Beleuchtung, Service)?</label>
       <div class="yn">
@@ -386,19 +413,17 @@ function viewZusammenfassung(){
       <div class="sumline"><span class="k">Zeitpunkt</span><span class="v">${state.art}</span></div>
       <div class="sumline"><span class="k">Datum/Uhrzeit</span><span class="v">${nowStr()}</span></div>
       <div class="sumline"><span class="k">Handzeichen</span><span class="v">${state.mit.hz} · ${state.mit.name}</span></div>
+      ${istEnde?`<div class="sumline"><span class="k">Neuer Schaden</span><span class="v" style="${state.neuerSchaden?'color:var(--red);':''}">${state.neuerSchaden?'JA':'Nein'}</span></div>
+      ${state.neuerSchaden?`<div class="sumline"><span class="k">Beschreibung</span><span class="v">${schadenText}</span></div>`:''}`:''}
       <div class="sumthumbs">${seiten().map(s=>`<img src="${state.fotos[s.id]}">`).join("")}</div>
     </div>
+    ${istEnde?`<button class="btn btn-ghost" id="editSchaden">Schadensangabe ändern</button>`:''}
     <button class="btn btn-ghost" id="back">← Zurück zu den Fotos</button>`;
   foot.innerHTML = `<button class="btn btn-primary" id="fertig" ${absendenBereit()?'':'disabled'}>Speichern & absenden</button>`;
-  app.querySelectorAll("[data-ns]").forEach(b=>b.onclick=()=>{
-    state.neuerSchaden = b.dataset.ns==="yes";
-    if(!state.neuerSchaden){ state.sprachnotiz=null; stopRec(); }
-    render();
-  });
   app.querySelectorAll("[data-wl]").forEach(b=>b.onclick=()=>{ state.warnleuchten = b.dataset.wl==="yes"; render(); });
+  const es=$("#editSchaden"); if(es) es.onclick=()=>{ state.schadenAbgefragt=false; state.reviewReady=false; stopRec(); render(); };
   $("#back").onclick=()=>{state.reviewReady=false; stopRec(); render();};
   $("#fertig").onclick=()=>absenden();
-  bindSprache();
 }
 function absendenBereit(){
   if(state.neuerSchaden===null) return false;
@@ -525,7 +550,7 @@ function showDone(fname){
     <p class="lead">Das PDF wurde erstellt${CONFIG.webhookUrl?' und an die Zentrale gesendet':''}.<br>${state.neuerSchaden?'Der Fuhrpark wird per E-Mail benachrichtigt.':''}</p>
     <p class="hint" style="text-align:center;">${fname}</p></div>`;
   foot.innerHTML=`<button class="btn btn-navy" id="neu">Nächstes Fahrzeug</button>`;
-  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},fotoStatus:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,reviewReady:false};render();};
+  $("#neu").onclick=()=>{const mit=state.mit;state={fahrzeug:null,art:null,mit:mit,fotos:{},fotoStatus:{},neuerSchaden:null,schadenText:"",sprachnotiz:null,warnleuchten:null,schadenAbgefragt:false,reviewReady:false};render();};
 }
 
 /* Info-Overlay */
