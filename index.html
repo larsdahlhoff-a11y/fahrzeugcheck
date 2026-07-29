@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Fahrzeug-Check | Pflegedienst Herrlich</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -119,6 +122,7 @@
     <div style="margin-top:18px;padding:14px;background:var(--teal-soft);border-radius:12px;font-size:13px;color:var(--navy);">
       <b>Wichtig:</b> Auch wenn nichts kaputt ist – bitte trotzdem fotografieren. Nur so ist belegt, in welchem Zustand du das Auto übernommen und abgegeben hast. Das schützt dich.
     </div>
+    <p class="hint" style="text-align:center;margin-top:16px;">App-Version <span id="appVer">–</span> · bei Problemen diese Nummer durchgeben</p>
   </div>
 </div>
 <main id="app"></main>
@@ -150,6 +154,7 @@ const CONFIG = {
   meldeEmail: "info@pflegedienst-herrlich.de",
   erkennung: true   // Fahrzeugerkennung (grüner Haken) an/aus. Bei Problemen auf älteren Handys auf false setzen.
 };
+const APP_VERSION = "2026-07-29a";   // bei jeder Änderung hochzählen – zur Ferndiagnose ("Welche Version steht bei dir?")
 
 /* ============================================================ */
 const $ = s => document.querySelector(s);
@@ -305,11 +310,18 @@ function viewStart(){
       </select>
     </div>
     <button class="btn btn-ghost" id="back">← Anderes Fahrzeug</button>`;
-  foot.innerHTML = `<button class="btn btn-primary" id="weiter" ${state.art&&state.mit?'':'disabled'}>Weiter zu den Fotos</button>`;
+  foot.innerHTML = `<button class="btn btn-primary" id="weiter">Weiter</button>`;
   app.querySelectorAll("[data-art]").forEach(b=>b.onclick=()=>{state.art=b.dataset.art;render();});
-  $("#hzSel").onchange=e=>{state.mit=CONFIG.mitarbeiter.find(m=>m.hz===e.target.value)||null; $("#weiter").disabled=!(state.art&&state.mit);};
+  const sel=$("#hzSel");
+  const syncMit=()=>{ state.mit = CONFIG.mitarbeiter.find(m=>m.hz===sel.value) || null; };
+  sel.onchange=syncMit; sel.oninput=syncMit;   // beide Events – manche Handy-Browser feuern nur eines
   $("#back").onclick=()=>{state.fahrzeug=null;render();};
-  $("#weiter").onclick=()=>{if(state.art&&state.mit)render();};
+  $("#weiter").onclick=()=>{
+    syncMit();   // Auswahl beim Klick direkt aus dem Feld lesen – unabhängig davon, ob 'change' vorher gefeuert hat
+    if(!state.art){ toast("Bitte zuerst Fahrtbeginn oder Fahrtende wählen."); return; }
+    if(!state.mit){ toast("Bitte dein Handzeichen auswählen."); return; }
+    render();
+  };
 }
 
 function carSideIcon(){return `<svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 28h48M10 28c0-6 4-12 12-12h14c6 0 10 4 14 10M14 16l3-6h20l4 6"/><circle cx="18" cy="30" r="4" fill="#fff"/><circle cx="42" cy="30" r="4" fill="#fff"/></svg>`;}
@@ -560,6 +572,7 @@ document.getElementById("infoOverlay").onclick=e=>{ if(e.target.id==="infoOverla
 
 /* QR-Deeplink ?kfz=3 */
 (function init(){
+  const av=document.getElementById("appVer"); if(av) av.textContent=APP_VERSION;
   const p=new URLSearchParams(location.search);const kfz=p.get("kfz")||p.get("fahrzeug");
   if(kfz){const f=CONFIG.fahrzeuge.find(x=>x.n===kfz);if(f)state.fahrzeug=f;}
   render();
